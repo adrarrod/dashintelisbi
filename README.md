@@ -59,7 +59,7 @@ vale para todas as abas e acompanha a navegação.
 | Visão Geral | faturamento, pedidos, ticket médio, margem, orçamento do ano, faturamento mensal e por categoria, últimas vendas |
 | Vendas | faturamento e margem por mês, por canal e por vendedor, top 10 produtos, cancelamentos |
 | Orçamento | receita e despesa previsto x realizado por mês e por categoria, com desvio |
-| Clientes | cadastrados, ativos, novos, faturamento por segmento, distribuição por UF, maiores clientes |
+| Clientes | **Indicadores:** cadastrados, ativos, novos, faturamento por segmento, distribuição por UF, maiores clientes. **Consulta e cadastro:** busca por nome, cidade ou CPF/CNPJ com filtros de segmento, UF e situação; ficha do cliente com últimas compras; cadastro e edição |
 | Fornecedores | compras por mês e categoria, entregas no prazo, avaliação e ranking |
 | Análise de Dados | curva ABC de clientes, margem por categoria, sazonalidade por dia da semana, ticket médio, efeito do desconto e console SQL somente leitura com exportação CSV |
 
@@ -74,5 +74,6 @@ public/static/       # JS e CSS (formatação pt-BR, gráficos Chart.js, filtros
 data/                # uma base .db por cliente
 ```
 
-As bases são abertas sempre em modo somente leitura pelo dashboard. AdminLTE 3.2, Bootstrap 4, Chart.js 4 e
+O dashboard abre as bases em modo somente leitura; só o cadastro de clientes grava, e apenas quando a base
+pode ser escrita (no seu computador). Na Vercel, ou com `DASH_SOMENTE_LEITURA=1`, o cadastro fica bloqueado. AdminLTE 3.2, Bootstrap 4, Chart.js 4 e
 Font Awesome são carregados por CDN.

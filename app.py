@@ -61,11 +61,22 @@ def caminho_base(slug):
     return caminho
 
 
-@contextmanager
-def conectar(slug):
-    """Abre a base do cliente em modo somente leitura e fecha ao final."""
+def pode_editar(slug):
+    """Cadastro só é liberado quando a base pode ser gravada (no seu computador).
+
+    Na Vercel o disco é somente leitura; DASH_SOMENTE_LEITURA=1 também bloqueia.
+    """
+    if os.environ.get("VERCEL") or os.environ.get("DASH_SOMENTE_LEITURA") == "1":
+        return False
     caminho = caminho_base(slug)
-    con = sqlite3.connect(f"file:{caminho}?mode=ro", uri=True)
+    return os.access(caminho, os.W_OK) and os.access(caminho.parent, os.W_OK)
+
+
+@contextmanager
+def conectar(slug, escrita=False):
+    """Abre a base do cliente (somente leitura por padrão) e fecha ao final."""
+    caminho = caminho_base(slug)
+    con = sqlite3.connect(f"file:{caminho}?mode={'rw' if escrita else 'ro'}", uri=True)
     con.row_factory = sqlite3.Row
     try:
         yield con
@@ -123,7 +134,8 @@ def pagina(cliente, pagina="visao-geral"):
     atual = next((c for c in clientes if c["slug"] == cliente), {"slug": cliente, "nome": cliente})
     titulo = next(p[1] for p in PAGINAS if p[0] == pagina)
     return render_template(f"{pagina.replace('-', '_')}.html", clientes=clientes, cliente=atual,
-                           pagina=pagina, titulo=titulo)
+                           pagina=pagina, titulo=titulo, pode_editar=pode_editar(cliente),
+                           ufs=UFS)
 
 
 # --------------------------------------------------------------------------- API
@@ -336,6 +348,141 @@ def api_consulta(cliente):
         return jsonify({"erro": str(e)}), 400
     return jsonify({"colunas": colunas, "linhas": dados[:LIMITE_CONSULTA],
                     "truncado": len(dados) > LIMITE_CONSULTA})
+
+
+# --------------------------------------------------------------------------- cadastro de clientes
+
+UFS = ["AC", "AL", "AM", "AP", "BA", "CE", "DF", "ES", "GO", "MA", "MG", "MS", "MT", "PA", "PB", "PE",
+       "PI", "PR", "RJ", "RN", "RO", "RR", "RS", "SC", "SE", "SP", "TO"]
+POR_PAGINA = 20
+
+
+def formatar_documento(doc):
+    """Aceita CPF (11 dígitos) ou CNPJ (14 dígitos), com ou sem máscara."""
+    d = re.sub(r"\D", "", doc or "")
+    if not d:
+        return None
+    if len(d) == 11:
+        return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
+    if len(d) == 14:
+        return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
+    raise ValueError("Documento deve ser um CPF (11 dígitos) ou CNPJ (14 dígitos).")
+
+
+def validar_cliente(dados):
+    erros = {}
+    nome = (dados.get("nome") or "").strip()
+    if not nome:
+        erros["nome"] = "Informe o nome."
+    elif len(nome) > 120:
+        erros["nome"] = "Máximo de 120 caracteres."
+    try:
+        documento = formatar_documento(dados.get("documento"))
+    except ValueError as e:
+        erros["documento"] = str(e)
+        documento = None
+    uf = (dados.get("uf") or "").strip().upper() or None
+    if uf and uf not in UFS:
+        erros["uf"] = "UF inválida."
+    cidade = (dados.get("cidade") or "").strip()[:80] or None
+    segmento = (dados.get("segmento") or "").strip()[:40] or None
+    ativo = 0 if str(dados.get("ativo", "1")).lower() in ("0", "false", "off", "") else 1
+    return erros, {"nome": nome, "documento": documento, "cidade": cidade, "uf": uf,
+                   "segmento": segmento, "ativo": ativo}
+
+
+@app.route("/api/<cliente>/clientes/lista")
+def api_clientes_lista(cliente):
+    """Consulta paginada de clientes com filtros por texto, segmento, UF e situação."""
+    q = request.args.get("q", "").strip()
+    filtros, params = [], []
+    if q:
+        digitos = re.sub(r"\D", "", q)
+        cond = "(c.nome LIKE ? OR c.cidade LIKE ?"
+        params += [f"%{q}%", f"%{q}%"]
+        if digitos:
+            cond += " OR REPLACE(REPLACE(REPLACE(c.documento,'.',''),'/',''),'-','') LIKE ?"
+            params.append(f"%{digitos}%")
+        filtros.append(cond + ")")
+    for campo in ("segmento", "uf"):
+        if request.args.get(campo):
+            filtros.append(f"c.{campo} = ?")
+            params.append(request.args[campo])
+    if request.args.get("ativo") in ("0", "1"):
+        filtros.append("c.ativo = ?")
+        params.append(int(request.args["ativo"]))
+    where = ("WHERE " + " AND ".join(filtros)) if filtros else ""
+    try:
+        pagina = max(1, int(request.args.get("pagina", 1)))
+    except ValueError:
+        pagina = 1
+    with conectar(cliente) as con:
+        total = valor(con, f"SELECT COUNT(*) FROM clientes c {where}", params)
+        registros = linhas(con, f"""
+            SELECT c.*, COALESCE(v.faturamento, 0) faturamento, v.ultima_compra
+            FROM clientes c
+            LEFT JOIN (SELECT cliente_id, SUM(valor_total) faturamento, MAX(data) ultima_compra
+                       FROM vendas WHERE {FATURADA} GROUP BY cliente_id) v ON v.cliente_id = c.id
+            {where} ORDER BY c.nome COLLATE NOCASE LIMIT ? OFFSET ?""",
+            params + [POR_PAGINA, (pagina - 1) * POR_PAGINA])
+        segmentos = [r["segmento"] for r in linhas(con, """SELECT DISTINCT segmento FROM clientes
+            WHERE segmento IS NOT NULL AND segmento <> '' ORDER BY segmento""")]
+    return jsonify({"total": total, "pagina": pagina, "por_pagina": POR_PAGINA,
+                    "registros": registros, "segmentos": segmentos})
+
+
+@app.route("/api/<cliente>/clientes/<int:cid>")
+def api_cliente_detalhe(cliente, cid):
+    with conectar(cliente) as con:
+        row = con.execute("SELECT * FROM clientes WHERE id = ?", (cid,)).fetchone()
+        if not row:
+            abort(404)
+        resumo = dict(con.execute(f"""SELECT COUNT(*) pedidos, COALESCE(SUM(valor_total),0) faturamento,
+                MIN(data) primeira_compra, MAX(data) ultima_compra
+            FROM vendas WHERE {FATURADA} AND cliente_id = ?""", (cid,)).fetchone())
+        compras = linhas(con, """SELECT v.data, p.nome produto, v.quantidade, v.valor_total, v.status
+            FROM vendas v JOIN produtos p ON p.id = v.produto_id
+            WHERE v.cliente_id = ? ORDER BY v.data DESC, v.id DESC LIMIT 10""", (cid,))
+    return jsonify({"cliente": dict(row), "resumo": resumo, "compras": compras})
+
+
+def _salvar_cliente(cliente, cid=None):
+    if not pode_editar(cliente):
+        return jsonify({"erro": "Esta base está em modo somente leitura (por exemplo, na Vercel). "
+                                "Cadastre clientes rodando o dashboard no seu computador."}), 403
+    erros, c = validar_cliente(request.get_json(silent=True) or {})
+    if erros:
+        return jsonify({"erro": "Verifique os campos destacados.", "campos": erros}), 400
+    with conectar(cliente, escrita=True) as con:
+        if c["documento"]:
+            dup = con.execute("SELECT id, nome FROM clientes WHERE documento = ? AND id IS NOT ?",
+                              (c["documento"], cid)).fetchone()
+            if dup:
+                return jsonify({"erro": "Documento já cadastrado.",
+                                "campos": {"documento": f"Já usado por {dup['nome']} (#{dup['id']})."}}), 409
+        if cid is None:
+            cur = con.execute("""INSERT INTO clientes (nome, documento, cidade, uf, segmento, data_cadastro, ativo)
+                                 VALUES (:nome, :documento, :cidade, :uf, :segmento, :data_cadastro, :ativo)""",
+                              {**c, "data_cadastro": date.today().isoformat()})
+            cid = cur.lastrowid
+        else:
+            cur = con.execute("""UPDATE clientes SET nome=:nome, documento=:documento, cidade=:cidade, uf=:uf,
+                                 segmento=:segmento, ativo=:ativo WHERE id=:id""", {**c, "id": cid})
+            if cur.rowcount == 0:
+                abort(404)
+        con.commit()
+        row = dict(con.execute("SELECT * FROM clientes WHERE id = ?", (cid,)).fetchone())
+    return jsonify({"cliente": row}), 201 if request.method == "POST" else 200
+
+
+@app.route("/api/<cliente>/clientes", methods=["POST"])
+def api_cliente_criar(cliente):
+    return _salvar_cliente(cliente)
+
+
+@app.route("/api/<cliente>/clientes/<int:cid>", methods=["PUT"])
+def api_cliente_atualizar(cliente, cid):
+    return _salvar_cliente(cliente, cid)
 
 
 if __name__ == "__main__":

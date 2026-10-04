@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% from "_macros.html" import kpi, card_grafico, card_tabela %}
 {% block conteudo %}
+<ul class="nav nav-pills mb-3" id="abas-clientes" role="tablist">
+  <li class="nav-item"><a class="nav-link active" data-toggle="pill" href="#aba-indicadores" role="tab"><i class="fas fa-chart-bar mr-1"></i> Indicadores</a></li>
+  <li class="nav-item"><a class="nav-link" data-toggle="pill" href="#aba-cadastro" role="tab"><i class="fas fa-search mr-1"></i> Consulta e cadastro</a></li>
+</ul>
+<div class="tab-content">
+<div class="tab-pane fade show active" id="aba-indicadores" role="tabpanel">
 <div class="row">
   {{ kpi('k-total', 'Clientes cadastrados', 'fas fa-address-book', 'info') }}
   {{ kpi('k-ativos', 'Clientes ativos', 'fas fa-user-check', 'success') }}
@@ -15,10 +21,129 @@
 <div class="row">
   {{ card_tabela('t-ranking', 'Maiores clientes no período', ['Cliente', 'Cidade', 'Segmento', '#Pedidos', '#Faturamento', 'Última compra']) }}
 </div>
+</div>
+
+<div class="tab-pane fade" id="aba-cadastro" role="tabpanel">
+  <div class="card card-outline card-primary">
+    <div class="card-header">
+      <form id="form-busca" class="form-row align-items-center" autocomplete="off">
+        <div class="col-md-4 mb-2 mb-md-0">
+          <div class="input-group input-group-sm">
+            <div class="input-group-prepend"><span class="input-group-text"><i class="fas fa-search"></i></span></div>
+            <input type="search" class="form-control" name="q" placeholder="Buscar por nome, cidade ou CPF/CNPJ" aria-label="Buscar cliente">
+          </div>
+        </div>
+        <div class="col-6 col-md-2 mb-2 mb-md-0">
+          <select class="form-control form-control-sm" name="segmento" id="busca-segmento" aria-label="Segmento"><option value="">Todos os segmentos</option></select>
+        </div>
+        <div class="col-6 col-md-2 mb-2 mb-md-0">
+          <select class="form-control form-control-sm" name="uf" aria-label="UF"><option value="">Todas as UFs</option>
+            {% for uf in ufs %}<option>{{ uf }}</option>{% endfor %}</select>
+        </div>
+        <div class="col-6 col-md-2">
+          <select class="form-control form-control-sm" name="ativo" aria-label="Situação">
+            <option value="">Ativos e inativos</option><option value="1">Somente ativos</option><option value="0">Somente inativos</option></select>
+        </div>
+        <div class="col-6 col-md-2 text-right">
+          {% if pode_editar %}
+          <button type="button" class="btn btn-sm btn-success" id="btn-novo"><i class="fas fa-user-plus"></i> Novo cliente</button>
+          {% else %}
+          <span class="badge badge-secondary p-2" title="A base não pode ser gravada aqui (ex.: Vercel). Rode no seu computador para cadastrar."><i class="fas fa-lock"></i> Somente leitura</span>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+    <div class="card-body table-responsive p-0">
+      <table class="table table-sm table-hover table-dash mb-0">
+        <thead><tr><th>#</th><th>Nome</th><th>CPF/CNPJ</th><th>Cidade</th><th>Segmento</th><th>Cadastro</th><th class="num">Faturamento</th><th>Situação</th></tr></thead>
+        <tbody id="t-lista"><tr><td colspan="8" class="text-center text-muted">Carregando…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center small">
+      <span id="lista-info" class="text-muted"></span>
+      <div class="btn-group btn-group-sm">
+        <button class="btn btn-outline-secondary" id="pag-ant" aria-label="Página anterior"><i class="fas fa-chevron-left"></i></button>
+        <button class="btn btn-outline-secondary" id="pag-prox" aria-label="Próxima página"><i class="fas fa-chevron-right"></i></button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- Detalhe do cliente -->
+<div class="modal fade" id="modal-detalhe" tabindex="-1" role="dialog" aria-labelledby="detalhe-titulo" aria-hidden="true">
+  <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="detalhe-titulo">Cliente</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar"><span aria-hidden="true">&times;</span></button></div>
+      <div class="modal-body">
+        <div class="row" id="detalhe-dados"></div>
+        <h6 class="mt-3">Últimas compras</h6>
+        <div class="table-responsive"><table class="table table-sm table-striped table-dash mb-0">
+          <thead><tr><th>Data</th><th>Produto</th><th class="num">Qtd.</th><th class="num">Valor</th><th>Status</th></tr></thead>
+          <tbody id="detalhe-compras"></tbody></table></div>
+      </div>
+      <div class="modal-footer">
+        {% if pode_editar %}<button type="button" class="btn btn-primary" id="btn-editar"><i class="fas fa-edit"></i> Editar</button>{% endif %}
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if pode_editar %}
+<!-- Novo cliente / edição -->
+<div class="modal fade" id="modal-form" tabindex="-1" role="dialog" aria-labelledby="form-titulo" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <form class="modal-content" id="form-cliente" novalidate autocomplete="off">
+      <div class="modal-header"><h5 class="modal-title" id="form-titulo">Novo cliente</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Fechar"><span aria-hidden="true">&times;</span></button></div>
+      <div class="modal-body">
+        <div id="form-erro" class="alert alert-danger d-none" role="alert"></div>
+        <div class="form-group">
+          <label for="c-nome">Nome / Razão social <span class="text-danger">*</span></label>
+          <input class="form-control" id="c-nome" name="nome" maxlength="120" required>
+          <div class="invalid-feedback"></div>
+        </div>
+        <div class="form-group">
+          <label for="c-documento">CPF ou CNPJ</label>
+          <input class="form-control" id="c-documento" name="documento" inputmode="numeric" placeholder="Somente números ou com máscara">
+          <div class="invalid-feedback"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-8">
+            <label for="c-cidade">Cidade</label>
+            <input class="form-control" id="c-cidade" name="cidade" maxlength="80">
+          </div>
+          <div class="form-group col-4">
+            <label for="c-uf">UF</label>
+            <select class="form-control" id="c-uf" name="uf"><option value=""></option>
+              {% for uf in ufs %}<option>{{ uf }}</option>{% endfor %}</select>
+            <div class="invalid-feedback"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="c-segmento">Segmento</label>
+          <input class="form-control" id="c-segmento" name="segmento" maxlength="40" list="lista-segmentos">
+          <datalist id="lista-segmentos"></datalist>
+        </div>
+        <div class="custom-control custom-switch">
+          <input type="checkbox" class="custom-control-input" id="c-ativo" name="ativo" checked>
+          <label class="custom-control-label" for="c-ativo">Cliente ativo</label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+        <button type="submit" class="btn btn-success" id="btn-salvar"><i class="fas fa-save"></i> Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 <script>
-Dash.iniciar('clientes', d => {
+const carregarIndicadores = Dash.iniciar('clientes', d => {
   const { fmt } = Dash;
   Dash.texto('k-total', fmt.num(d.total));
   Dash.texto('k-ativos', fmt.num(d.ativos));
@@ -35,5 +160,127 @@ Dash.iniciar('clientes', d => {
     { campo: 'ultima_compra', fmt: fmt.dia },
   ]);
 });
+</script>
+<script>
+(function () {
+  const { fmt } = Dash;
+  const base = `/api/${encodeURIComponent(DASH.cliente)}/clientes`;
+  const busca = document.getElementById('form-busca');
+  let pagina = 1, total = 0, porPagina = 20, atual = null, timer = null;
+
+  // Mantém a aba escolhida no endereço (#cadastro) para voltar direto a ela.
+  if (location.hash === '#cadastro') $('#abas-clientes a[href="#aba-cadastro"]').tab('show');
+  $('#abas-clientes a').on('shown.bs.tab', e => history.replaceState(null, '', location.search + (e.target.hash === '#aba-cadastro' ? '#cadastro' : '')));
+
+  async function listar() {
+    const p = new URLSearchParams(new FormData(busca));
+    p.set('pagina', pagina);
+    const r = await fetch(`${base}/lista?${p}`).then(x => x.json());
+    total = r.total; porPagina = r.por_pagina;
+    const sel = document.getElementById('busca-segmento');
+    if (sel.options.length === 1) sel.insertAdjacentHTML('beforeend', r.segmentos.map(s => `<option>${fmt.esc(s)}</option>`).join(''));
+    const dl = document.getElementById('lista-segmentos');
+    if (dl) dl.innerHTML = r.segmentos.map(s => `<option value="${fmt.esc(s)}">`).join('');
+    Dash.tabela('t-lista', r.registros, [
+      { campo: 'id' }, { campo: 'nome' }, { campo: 'documento' },
+      { campo: c => [c.cidade, c.uf].filter(Boolean).join('/') }, { campo: 'segmento' },
+      { campo: 'data_cadastro', fmt: fmt.dia }, { campo: 'faturamento', fmt: fmt.brl, num: true },
+      { html: c => `<span class="badge badge-${c.ativo ? 'success' : 'secondary'}">${c.ativo ? 'Ativo' : 'Inativo'}</span>` },
+    ]);
+    document.querySelectorAll('#t-lista tr').forEach((tr, i) => {
+      const c = r.registros[i];
+      if (!c) return;
+      tr.style.cursor = 'pointer'; tr.tabIndex = 0; tr.title = 'Ver detalhes';
+      tr.addEventListener('click', () => detalhar(c.id));
+      tr.addEventListener('keydown', e => { if (e.key === 'Enter') detalhar(c.id); });
+    });
+    const ini = total ? (pagina - 1) * porPagina + 1 : 0;
+    Dash.texto('lista-info', `${fmt.num(ini)}–${fmt.num(Math.min(pagina * porPagina, total))} de ${fmt.num(total)} clientes`);
+    document.getElementById('pag-ant').disabled = pagina <= 1;
+    document.getElementById('pag-prox').disabled = pagina * porPagina >= total;
+  }
+
+  busca.addEventListener('submit', e => { e.preventDefault(); pagina = 1; listar(); });
+  busca.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { pagina = 1; listar(); }, 300); });
+  busca.addEventListener('change', () => { pagina = 1; listar(); });
+  document.getElementById('pag-ant').addEventListener('click', () => { pagina--; listar(); });
+  document.getElementById('pag-prox').addEventListener('click', () => { pagina++; listar(); });
+
+  async function detalhar(id) {
+    const r = await fetch(`${base}/${id}`).then(x => x.json());
+    atual = r.cliente;
+    const c = r.cliente, s = r.resumo;
+    Dash.texto('detalhe-titulo', `#${c.id} · ${c.nome}`);
+    const campo = (rot, val) => `<div class="col-sm-4 mb-2"><div class="small text-muted">${rot}</div><div>${fmt.esc(val || '–')}</div></div>`;
+    document.getElementById('detalhe-dados').innerHTML = [
+      campo('CPF/CNPJ', c.documento), campo('Cidade', [c.cidade, c.uf].filter(Boolean).join('/')), campo('Segmento', c.segmento),
+      campo('Cadastro', fmt.dia(c.data_cadastro)), campo('Situação', c.ativo ? 'Ativo' : 'Inativo'), campo('Pedidos', fmt.num(s.pedidos)),
+      campo('Faturamento total', fmt.brl(s.faturamento)), campo('Primeira compra', fmt.dia(s.primeira_compra)), campo('Última compra', fmt.dia(s.ultima_compra)),
+    ].join('');
+    Dash.tabela('detalhe-compras', r.compras, [
+      { campo: 'data', fmt: fmt.dia }, { campo: 'produto' }, { campo: 'quantidade', num: true },
+      { campo: 'valor_total', fmt: fmt.brl, num: true }, { campo: 'status' },
+    ]);
+    $('#modal-detalhe').modal('show');
+  }
+
+  const form = document.getElementById('form-cliente');
+  if (form) {
+    let editando = null;
+    function abrirForm(c) {
+      editando = c ? c.id : null;
+      form.reset();
+      form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+      document.getElementById('form-erro').classList.add('d-none');
+      Dash.texto('form-titulo', c ? `Editar cliente #${c.id}` : 'Novo cliente');
+      if (c) ['nome', 'documento', 'cidade', 'uf', 'segmento'].forEach(k => { form.elements[k].value = c[k] || ''; });
+      form.elements.ativo.checked = c ? !!c.ativo : true;
+      $('#modal-form').modal('show');
+    }
+    $('#modal-form').on('shown.bs.modal', () => form.elements.nome.focus());
+    document.getElementById('btn-novo').addEventListener('click', () => abrirForm(null));
+    document.getElementById('btn-editar').addEventListener('click', () => {
+      $('#modal-detalhe').one('hidden.bs.modal', () => abrirForm(atual)).modal('hide');
+    });
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const dados = Object.fromEntries(['nome', 'documento', 'cidade', 'uf', 'segmento'].map(k => [k, form.elements[k].value]));
+      dados.ativo = form.elements.ativo.checked ? 1 : 0;
+      form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+      const btn = document.getElementById('btn-salvar');
+      btn.disabled = true;
+      try {
+        const resp = await fetch(editando ? `${base}/${editando}` : base, {
+          method: editando ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dados),
+        });
+        const r = await resp.json();
+        if (!resp.ok) {
+          const alerta = document.getElementById('form-erro');
+          alerta.textContent = r.erro; alerta.classList.remove('d-none');
+          Object.entries(r.campos || {}).forEach(([k, msg]) => {
+            const el = form.elements[k];
+            if (!el) return;
+            el.classList.add('is-invalid');
+            const fb = el.parentElement.querySelector('.invalid-feedback');
+            if (fb) fb.textContent = msg;
+          });
+          return;
+        }
+        $('#modal-form').modal('hide');
+        $(document).Toasts('create', {
+          class: 'bg-success', autohide: true, delay: 3500, title: editando ? 'Cliente atualizado' : 'Cliente cadastrado',
+          body: `#${r.cliente.id} · ${fmt.esc(r.cliente.nome)}`,
+        });
+        if (!editando) { busca.reset(); pagina = 1; }
+        await listar();
+        (await carregarIndicadores)();
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  listar();
+})();
 </script>
 {% endblock %}
