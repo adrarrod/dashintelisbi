@@ -27,7 +27,9 @@ PAGINAS = [
 ]
 PAGINAS_SLUGS = {p[0] for p in PAGINAS}
 
-app = Flask(__name__)
+# Arquivos estáticos ficam em public/static: a Vercel serve public/** direto pela CDN,
+# e localmente o Flask serve a mesma pasta em /static.
+app = Flask(__name__, static_folder="public/static", static_url_path="/static")
 
 
 # --------------------------------------------------------------------------- bases

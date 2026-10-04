@@ -3,13 +3,37 @@
 Dashboard web no estilo **AdminLTE** em que cada cliente tem a sua própria base **SQLite**.
 O modelo padrão traz as abas **Visão Geral, Vendas, Orçamento, Clientes, Fornecedores e Análise de Dados**.
 
-## Como rodar
+## Como rodar no seu computador (VS Code)
 
-```bash
-pip install -r requirements.txt
-python scripts/novo_cliente.py --demo   # cria data/techsul.db e data/padaria-central.db com dados fictícios
-python app.py                           # abre em http://127.0.0.1:5000
-```
+1. Baixe o projeto: `git clone https://github.com/adrarrod/dashintelisbi.git`
+   (ou, no GitHub, **Code → Download ZIP** e descompacte).
+2. Abra a pasta no VS Code (**File → Open Folder**) e um terminal (**Terminal → New Terminal**).
+3. Crie um ambiente virtual e instale as dependências (precisa do Python 3.10+):
+   ```bash
+   python -m venv .venv
+   # Windows:  .venv\Scripts\activate      macOS/Linux:  source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+4. Rode `python app.py` e abra http://127.0.0.1:5000.
+   Ou aperte **F5** no VS Code (configuração *DashIntelisBI (Flask)* em `.vscode/launch.json`), que roda com
+   recarga automática e permite usar breakpoints.
+
+As bases de exemplo `data/techsul.db` e `data/padaria-central.db` já vêm no repositório.
+Para recriá-las com dados novos: `python scripts/novo_cliente.py --demo`.
+
+## Publicar na Vercel
+
+O projeto já está no formato que a Vercel reconhece (Flask com `app` em `app.py`, arquivos estáticos em `public/`).
+
+1. Em [vercel.com/new](https://vercel.com/new), importe o repositório `adrarrod/dashintelisbi`.
+2. A Vercel detecta Flask sozinha; não precisa mudar nenhuma configuração. Clique em **Deploy**.
+3. Cada `git push` gera um novo deploy automaticamente.
+
+Observações:
+- Na Vercel o disco é somente leitura e as bases vêm do repositório. O dashboard só lê as bases, então funciona,
+  mas para **adicionar ou atualizar um cliente** é preciso colocar o `.db` em `data/`, fazer commit e push.
+- Qualquer pessoa com o link vê os dados. Para restringir, ative *Deployment Protection* (Vercel Authentication)
+  nas configurações do projeto na Vercel.
 
 O cliente é escolhido no seletor do topo da página; o período (data inicial e final, ou os atalhos 3M/6M/12M/Tudo)
 vale para todas as abas e acompanha a navegação.
@@ -46,8 +70,8 @@ app.py               # Flask: páginas + API JSON (/api/<cliente>/<aba>)
 db/schema.sql        # esquema padrão das bases
 scripts/novo_cliente.py
 templates/           # páginas AdminLTE (Jinja)
-static/js/dash.js    # formatação pt-BR, gráficos Chart.js, filtros
-data/                # uma base .db por cliente (não versionado)
+public/static/       # JS e CSS (formatação pt-BR, gráficos Chart.js, filtros)
+data/                # uma base .db por cliente
 ```
 
 As bases são abertas sempre em modo somente leitura pelo dashboard. AdminLTE 3.2, Bootstrap 4, Chart.js 4 e

@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
 .venv/
-data/*.db
+# As bases de exemplo são versionadas para o deploy na Vercel (que só lê o que está no repositório).
+# Para não versionar a base de um cliente real, liste-a aqui, ex.: data/acme.db
 data/*.db-journal
