@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% from "_macros.html" import card_grafico, card_tabela %}
+{% block conteudo %}
+<div class="row" id="abc-caixas"></div>
+<div class="row">
+  {{ card_grafico('g-abc', 'Curva ABC de clientes', 'col-lg-6', nota='% acumulado do faturamento') }}
+  {{ card_grafico('g-margem', 'Margem bruta por categoria', 'col-lg-6') }}
+</div>
+<div class="row">
+  {{ card_grafico('g-dia', 'Faturamento médio por dia da semana', 'col-lg-6') }}
+  {{ card_grafico('g-ticket', 'Ticket médio por mês', 'col-lg-6', nota='* mês parcial') }}
+</div>
+<div class="row">
+  {{ card_tabela('t-desconto', 'Impacto do desconto na margem', ['Desconto', '#Pedidos', '#Faturamento', '#Margem bruta'], 'col-lg-6') }}
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Tabelas da base</h3></div>
+      <div class="card-body small" id="lista-tabelas">–</div>
+    </div>
+  </div>
+</div>
+<div class="row">
+  <div class="col-12">
+    <div class="card card-outline card-secondary">
+      <div class="card-header"><h3 class="card-title"><i class="fas fa-terminal mr-1"></i> Consulta SQL (somente leitura)</h3></div>
+      <div class="card-body">
+        <form id="form-sql">
+          <label for="sql-editor" class="sr-only">Consulta SQL</label>
+          <textarea id="sql-editor" class="form-control mb-2" rows="5" spellcheck="false">SELECT p.categoria, strftime('%Y', v.data) AS ano, ROUND(SUM(v.valor_total), 2) AS faturamento
+FROM vendas v JOIN produtos p ON p.id = v.produto_id
+WHERE v.status = 'faturada'
+GROUP BY 1, 2 ORDER BY 1, 2</textarea>
+          <button type="submit" class="btn btn-sm btn-primary"><i class="fas fa-play"></i> Executar</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-csv" disabled><i class="fas fa-download"></i> Exportar CSV</button>
+          <span class="small text-muted ml-2" id="sql-info"></span>
+        </form>
+        <div class="resultado-sql mt-3">
+          <table class="table table-sm table-striped table-dash mb-0"><thead id="sql-cab"></thead><tbody id="sql-corpo"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const { fmt, PALETA } = Dash;
+  Dash.iniciar('analise', d => {
+    const total = Object.values(d.abc).reduce((s, x) => s + x.faturamento, 0) || 1;
+    const cores = { A: 'success', B: 'warning', C: 'secondary' };
+    const desc = { A: 'até 80% do faturamento', B: 'de 80% a 95%', C: 'últimos 5%' };
+    document.getElementById('abc-caixas').innerHTML = ['A', 'B', 'C'].map(k => `
+      <div class="col-md-4"><div class="info-box">
+        <span class="info-box-icon bg-${cores[k]}"><b>${k}</b></span>
+        <div class="info-box-content"><span class="info-box-text">Classe ${k} · ${desc[k]}</span>
+          <span class="info-box-number">${fmt.num(d.abc[k].clientes)} clientes · ${fmt.brlCurto(d.abc[k].faturamento)} (${fmt.pct(d.abc[k].faturamento / total * 100)})</span>
+        </div></div></div>`).join('');
+
+    Dash.grafico('g-abc', {
+      type: 'line',
+      data: { datasets: [{ label: '% acumulado', data: [{ x: 0, y: 0 }].concat(d.curva_abc.map(p => ({ x: p.pct_clientes, y: p.pct_acumulado }))),
+        borderColor: PALETA[0], backgroundColor: PALETA[0] + '1f', fill: true, tension: 0 }] },
+      options: {
+        interaction: { mode: 'nearest', intersect: false, axis: 'x' },
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+          title: i => `${fmt.pct(i[0].parsed.x)} dos clientes`, label: c => `${fmt.pct(c.parsed.y)} do faturamento` } } },
+        scales: {
+          x: { type: 'linear', min: 0, max: 100, title: { display: true, text: '% dos clientes' }, ticks: { callback: v => v + '%' }, grid: { display: false } },
+          y: { min: 0, max: 100, ticks: { callback: v => v + '%' }, grid: { color: 'rgba(0,0,0,.05)' } },
+        },
+      },
+    });
+    const pctOpts = { formato: v => fmt.pct(v), formatoEixo: v => v + '%' };
+    Dash.barras('g-margem', d.margem_categoria.map(x => x.rotulo), [{ label: 'Margem', data: d.margem_categoria.map(x => x.valor), cor: PALETA[2] }], Object.assign({ horizontal: true }, pctOpts));
+    Dash.barras('g-dia', d.dia_semana.map(x => fmt.diaSemana(x.dia)), [{ label: 'Faturamento médio', data: d.dia_semana.map(x => x.valor), cor: PALETA[3] }]);
+    Dash.linhas('g-ticket', fmt.meses(d.ticket_mensal, d.periodo), [{ label: 'Ticket médio', data: d.ticket_mensal.map(x => x.valor), cor: PALETA[4] }], { eixoY: { beginAtZero: false } });
+    Dash.tabela('t-desconto', d.desconto, [
+      { campo: 'desconto', fmt: v => v + '%' }, { campo: 'pedidos', fmt: fmt.num, num: true },
+      { campo: 'faturamento', fmt: fmt.brl, num: true }, { campo: 'margem_pct', fmt: v => fmt.pct(v), num: true },
+    ]);
+    document.getElementById('lista-tabelas').innerHTML = d.tabelas.map(t =>
+      `<a href="#" class="badge badge-light border mr-1 mb-1 p-2" data-tabela="${fmt.esc(t)}"><i class="fas fa-table mr-1"></i>${fmt.esc(t)}</a>`).join('') +
+      '<p class="text-muted mt-2 mb-0">Clique em uma tabela para consultá-la abaixo. Tabelas extras criadas na base deste cliente aparecem aqui automaticamente.</p>';
+  });
+
+  // Console SQL
+  const editor = document.getElementById('sql-editor');
+  const btnCsv = document.getElementById('btn-csv');
+  let ultimo = null;
+  document.getElementById('lista-tabelas').addEventListener('click', ev => {
+    const a = ev.target.closest('[data-tabela]');
+    if (!a) return;
+    ev.preventDefault();
+    editor.value = `SELECT * FROM "${a.dataset.tabela}" LIMIT 100`;
+    document.getElementById('form-sql').requestSubmit();
+  });
+  document.getElementById('form-sql').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const info = document.getElementById('sql-info');
+    info.textContent = 'Executando…';
+    const resp = await fetch(`/api/${encodeURIComponent(DASH.cliente)}/consulta`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sql: editor.value }),
+    });
+    const r = await resp.json();
+    const cab = document.getElementById('sql-cab'), corpo = document.getElementById('sql-corpo');
+    if (!resp.ok) {
+      info.innerHTML = `<span class="text-danger">${fmt.esc(r.erro)}</span>`;
+      cab.innerHTML = corpo.innerHTML = ''; btnCsv.disabled = true; ultimo = null;
+      return;
+    }
+    ultimo = r;
+    btnCsv.disabled = !r.linhas.length;
+    info.textContent = `${fmt.num(r.linhas.length)} linha(s)${r.truncado ? ' (limitado às primeiras 1.000)' : ''}`;
+    cab.innerHTML = '<tr>' + r.colunas.map(c => `<th>${fmt.esc(c)}</th>`).join('') + '</tr>';
+    corpo.innerHTML = r.linhas.map(l => '<tr>' + l.map(v =>
+      `<td class="${typeof v === 'number' ? 'num' : ''}">${v === null ? '<span class="text-muted">null</span>' : fmt.esc(typeof v === 'number' && !Number.isInteger(v) ? v.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : v)}</td>`).join('') + '</tr>').join('');
+  });
+  btnCsv.addEventListener('click', () => {
+    if (!ultimo) return;
+    const q = v => v === null ? '' : /[";\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+    const csv = [ultimo.colunas].concat(ultimo.linhas).map(l => l.map(q).join(';')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `${DASH.cliente}-consulta.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+})();
+</script>
+{% endblock %}

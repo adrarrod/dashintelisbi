@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "_macros.html" import kpi, card_grafico, card_tabela %}
+{% block conteudo %}
+<div class="row">
+  {{ kpi('k-faturamento', 'Faturamento no período', 'fas fa-dollar-sign', 'info', url_for('pagina', cliente=cliente.slug, pagina='vendas')) }}
+  {{ kpi('k-pedidos', 'Pedidos faturados', 'fas fa-shopping-bag', 'success', url_for('pagina', cliente=cliente.slug, pagina='vendas')) }}
+  {{ kpi('k-ticket', 'Ticket médio', 'fas fa-receipt', 'warning', url_for('pagina', cliente=cliente.slug, pagina='analise')) }}
+  {{ kpi('k-margem', 'Margem bruta', 'fas fa-percentage', 'primary', url_for('pagina', cliente=cliente.slug, pagina='analise')) }}
+</div>
+<div class="row">
+  <div class="col-md-3 col-sm-6">
+    <div class="info-box"><span class="info-box-icon bg-info"><i class="fas fa-users"></i></span>
+      <div class="info-box-content"><span class="info-box-text">Clientes ativos</span><span class="info-box-number" id="i-clientes">–</span></div></div>
+  </div>
+  <div class="col-md-3 col-sm-6">
+    <div class="info-box"><span class="info-box-icon bg-secondary"><i class="fas fa-truck"></i></span>
+      <div class="info-box-content"><span class="info-box-text">Fornecedores</span><span class="info-box-number" id="i-fornecedores">–</span></div></div>
+  </div>
+  <div class="col-md-3 col-sm-6">
+    <div class="info-box"><span class="info-box-icon bg-success"><i class="fas fa-arrow-up"></i></span>
+      <div class="info-box-content"><span class="info-box-text" id="i-receita-rotulo">Receita x orçamento</span>
+        <span class="info-box-number" id="i-receita">–</span>
+        <div class="progress"><div class="progress-bar bg-success" id="i-receita-barra" style="width:0"></div></div></div></div>
+  </div>
+  <div class="col-md-3 col-sm-6">
+    <div class="info-box"><span class="info-box-icon bg-danger"><i class="fas fa-arrow-down"></i></span>
+      <div class="info-box-content"><span class="info-box-text" id="i-despesa-rotulo">Despesa x orçamento</span>
+        <span class="info-box-number" id="i-despesa">–</span>
+        <div class="progress"><div class="progress-bar bg-danger" id="i-despesa-barra" style="width:0"></div></div></div></div>
+  </div>
+</div>
+<div class="row">
+  {{ card_grafico('g-mensal', 'Faturamento mensal', 'col-lg-8', nota='* mês parcial') }}
+  {{ card_grafico('g-categoria', 'Faturamento por categoria', 'col-lg-4') }}
+</div>
+<div class="row">
+  {{ card_tabela('t-ultimas', 'Últimas vendas', ['Data', 'Cliente', 'Produto', '#Valor', 'Status']) }}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+Dash.iniciar('visao-geral', d => {
+  const { fmt } = Dash;
+  Dash.texto('k-faturamento', fmt.brlCurto(d.kpis.faturamento));
+  Dash.texto('k-pedidos', fmt.num(d.kpis.pedidos));
+  Dash.texto('k-ticket', fmt.brl(d.kpis.ticket_medio));
+  Dash.texto('k-margem', fmt.pct(d.kpis.margem_pct));
+  Dash.texto('i-clientes', fmt.num(d.total_clientes));
+  Dash.texto('i-fornecedores', fmt.num(d.total_fornecedores));
+  const o = d.orcamento;
+  [['receita', o.receita_realizada, o.receita_prevista], ['despesa', o.despesa_realizada, o.despesa_prevista]].forEach(([k, real, prev]) => {
+    const pct = prev ? real / prev * 100 : 0;
+    Dash.texto(`i-${k}-rotulo`, `${k === 'receita' ? 'Receita' : 'Despesa'} x orçamento ${o.ano}`);
+    Dash.texto(`i-${k}`, `${fmt.brlCurto(real)} (${fmt.pct(pct, 0)})`);
+    document.getElementById(`i-${k}-barra`).style.width = Math.min(pct, 100) + '%';
+  });
+  Dash.barras('g-mensal', fmt.meses(d.mensal, d.periodo), [{ label: 'Faturamento', data: d.mensal.map(m => m.faturamento) }]);
+  Dash.rosca('g-categoria', d.por_categoria.map(c => ({ rotulo: c.categoria, valor: c.faturamento })));
+  Dash.tabela('t-ultimas', d.ultimas_vendas, [
+    { campo: 'data', fmt: fmt.dia }, { campo: 'cliente' }, { campo: 'produto' },
+    { campo: 'valor_total', fmt: fmt.brl, num: true },
+    { html: r => `<span class="badge badge-${r.status === 'faturada' ? 'success' : 'secondary'}">${fmt.esc(r.status)}</span>` },
+  ]);
+});
+</script>
+{% endblock %}

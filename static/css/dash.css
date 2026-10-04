@@ -1,0 +1,16 @@
+.seletor-cliente { min-width: 240px; }
+.filtros input[type=date] { width: 150px; }
+.chart-box { position: relative; height: 300px; }
+.chart-box.alto { height: 360px; }
+.small-box .inner h3 { font-size: clamp(1.25rem, 2.1vw, 1.9rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.table-dash td, .table-dash th { vertical-align: middle; white-space: nowrap; }
+.table-dash .num { text-align: right; font-variant-numeric: tabular-nums; }
+.legenda-serie { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.carregando { opacity: .5; transition: opacity .2s; }
+#sql-editor { font-family: SFMono-Regular, Menlo, Consolas, monospace; font-size: .85rem; }
+.resultado-sql { max-height: 420px; overflow: auto; }
+@media (max-width: 767.98px) {
+  .seletor-cliente { min-width: 0; max-width: 200px; }
+  .filtros { margin-top: .5rem; }
+  .filtros input[type=date] { width: 130px; }
+}

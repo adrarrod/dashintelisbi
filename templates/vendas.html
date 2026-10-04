@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_macros.html" import kpi, card_grafico, card_tabela %}
+{% block conteudo %}
+<div class="row">
+  {{ kpi('k-faturamento', 'Faturamento', 'fas fa-dollar-sign', 'info') }}
+  {{ kpi('k-pedidos', 'Pedidos faturados', 'fas fa-shopping-bag', 'success') }}
+  {{ kpi('k-ticket', 'Ticket médio', 'fas fa-receipt', 'warning') }}
+  {{ kpi('k-canceladas', 'Vendas canceladas', 'fas fa-ban', 'danger') }}
+</div>
+<div class="row">
+  {{ card_grafico('g-mensal', 'Faturamento e margem bruta por mês', 'col-12', alto=True, nota='* mês parcial') }}
+</div>
+<div class="row">
+  {{ card_grafico('g-canal', 'Faturamento por canal', 'col-lg-5') }}
+  {{ card_grafico('g-vendedor', 'Faturamento por vendedor', 'col-lg-7') }}
+</div>
+<div class="row">
+  {{ card_tabela('t-produtos', 'Top 10 produtos', ['Produto', 'Categoria', '#Quantidade', '#Faturamento']) }}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+Dash.iniciar('vendas', d => {
+  const { fmt } = Dash;
+  Dash.texto('k-faturamento', fmt.brlCurto(d.kpis.faturamento));
+  Dash.texto('k-pedidos', fmt.num(d.kpis.pedidos));
+  Dash.texto('k-ticket', fmt.brl(d.kpis.ticket_medio));
+  Dash.texto('k-canceladas', fmt.num(d.canceladas));
+  Dash.linhas('g-mensal', fmt.meses(d.mensal, d.periodo), [
+    { label: 'Faturamento', data: d.mensal.map(m => m.faturamento) },
+    { label: 'Margem bruta', data: d.mensal.map(m => m.margem) },
+  ]);
+  Dash.rosca('g-canal', d.por_canal);
+  Dash.barras('g-vendedor', d.por_vendedor.map(v => v.rotulo), [{ label: 'Faturamento', data: d.por_vendedor.map(v => v.valor) }], { horizontal: true });
+  Dash.tabela('t-produtos', d.top_produtos, [
+    { campo: 'produto' }, { campo: 'categoria' },
+    { campo: 'quantidade', fmt: fmt.num, num: true }, { campo: 'faturamento', fmt: fmt.brl, num: true },
+  ]);
+});
+</script>
+{% endblock %}

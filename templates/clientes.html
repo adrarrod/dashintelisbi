@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_macros.html" import kpi, card_grafico, card_tabela %}
+{% block conteudo %}
+<div class="row">
+  {{ kpi('k-total', 'Clientes cadastrados', 'fas fa-address-book', 'info') }}
+  {{ kpi('k-ativos', 'Clientes ativos', 'fas fa-user-check', 'success') }}
+  {{ kpi('k-compradores', 'Compraram no período', 'fas fa-shopping-cart', 'warning') }}
+  {{ kpi('k-novos', 'Novos no período', 'fas fa-user-plus', 'primary') }}
+</div>
+<div class="row">
+  {{ card_grafico('g-segmento', 'Faturamento por segmento', 'col-lg-4') }}
+  {{ card_grafico('g-uf', 'Clientes ativos por UF', 'col-lg-4') }}
+  {{ card_grafico('g-novos', 'Novos clientes por mês', 'col-lg-4') }}
+</div>
+<div class="row">
+  {{ card_tabela('t-ranking', 'Maiores clientes no período', ['Cliente', 'Cidade', 'Segmento', '#Pedidos', '#Faturamento', 'Última compra']) }}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+Dash.iniciar('clientes', d => {
+  const { fmt } = Dash;
+  Dash.texto('k-total', fmt.num(d.total));
+  Dash.texto('k-ativos', fmt.num(d.ativos));
+  Dash.texto('k-compradores', fmt.num(d.compradores));
+  Dash.texto('k-novos', fmt.num(d.novos));
+  Dash.rosca('g-segmento', d.por_segmento);
+  Dash.barras('g-uf', d.por_uf.map(x => x.rotulo), [{ label: 'Clientes', data: d.por_uf.map(x => x.valor) }],
+    { formato: fmt.num, formatoEixo: fmt.num });
+  Dash.barras('g-novos', d.novos_por_mes.map(x => fmt.mes(x.mes)), [{ label: 'Novos', data: d.novos_por_mes.map(x => x.novos), cor: Dash.PALETA[2] }],
+    { formato: fmt.num, formatoEixo: fmt.num });
+  Dash.tabela('t-ranking', d.ranking, [
+    { campo: 'nome' }, { campo: r => `${r.cidade}/${r.uf}` }, { campo: 'segmento' },
+    { campo: 'pedidos', fmt: fmt.num, num: true }, { campo: 'faturamento', fmt: fmt.brl, num: true },
+    { campo: 'ultima_compra', fmt: fmt.dia },
+  ]);
+});
+</script>
+{% endblock %}

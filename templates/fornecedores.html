@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% from "_macros.html" import kpi, card_grafico, card_tabela %}
+{% block conteudo %}
+<div class="row">
+  {{ kpi('k-total', 'Fornecedores', 'fas fa-truck', 'info') }}
+  {{ kpi('k-compras', 'Compras no período', 'fas fa-file-invoice-dollar', 'primary') }}
+  {{ kpi('k-prazo', 'Entregas no prazo', 'fas fa-clock', 'success') }}
+  {{ kpi('k-pendentes', 'Pedidos pendentes', 'fas fa-hourglass-half', 'warning') }}
+</div>
+<div class="row">
+  {{ card_grafico('g-mensal', 'Compras por mês', 'col-lg-8', nota='* mês parcial') }}
+  {{ card_grafico('g-categoria', 'Compras por categoria', 'col-lg-4') }}
+</div>
+<div class="row">
+  {{ card_tabela('t-ranking', 'Desempenho dos fornecedores', ['Fornecedor', 'Categoria', 'Cidade', '#Avaliação', '#Prazo (dias)', '#Pedidos', '#Total comprado', '#No prazo']) }}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+Dash.iniciar('fornecedores', d => {
+  const { fmt } = Dash;
+  Dash.texto('k-total', fmt.num(d.total));
+  Dash.texto('k-compras', fmt.brlCurto(d.kpis.total_compras));
+  Dash.texto('k-prazo', fmt.pct(d.kpis.pct_no_prazo, 0));
+  Dash.texto('k-pendentes', fmt.num(d.kpis.pendentes));
+  Dash.barras('g-mensal', fmt.meses(d.mensal, d.periodo), [{ label: 'Compras', data: d.mensal.map(m => m.valor), cor: Dash.PALETA[6] }]);
+  Dash.rosca('g-categoria', d.por_categoria);
+  const estrelas = n => '<span class="text-warning" aria-label="' + n + ' de 5">' + '★'.repeat(Math.round(n)) + '<span class="text-muted">' + '★'.repeat(5 - Math.round(n)) + '</span></span> ' + String(n).replace('.', ',');
+  Dash.tabela('t-ranking', d.ranking, [
+    { campo: 'nome' }, { campo: 'categoria' }, { campo: r => `${r.cidade}/${r.uf}` },
+    { num: true, html: r => estrelas(r.avaliacao) },
+    { campo: 'prazo_entrega_dias', num: true },
+    { campo: 'pedidos', fmt: fmt.num, num: true },
+    { campo: 'total', fmt: fmt.brl, num: true },
+    { num: true, html: r => r.pct_no_prazo == null ? '–' :
+        `<span class="badge badge-${r.pct_no_prazo >= 85 ? 'success' : r.pct_no_prazo >= 70 ? 'warning' : 'danger'}">${fmt.pct(r.pct_no_prazo, 0)}</span>` },
+  ]);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% macro kpi(id, rotulo, icone, cor='info', link=None) -%}
+<div class="col-lg-3 col-6">
+  <div class="small-box bg-{{ cor }}">
+    <div class="inner"><h3 id="{{ id }}">–</h3><p>{{ rotulo }}</p></div>
+    <div class="icon"><i class="{{ icone }}"></i></div>
+    {% if link %}<a href="{{ link }}" data-pagina class="small-box-footer">Detalhes <i class="fas fa-arrow-circle-right"></i></a>
+    {% else %}<span class="small-box-footer">&nbsp;</span>{% endif %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro card_grafico(id, titulo, col='col-lg-6', alto=False, nota=None) -%}
+<div class="{{ col }}">
+  <div class="card card-outline card-primary">
+    <div class="card-header"><h3 class="card-title">{{ titulo }}</h3>
+      {% if nota %}<div class="card-tools small text-muted pt-1">{{ nota }}</div>{% endif %}
+    </div>
+    <div class="card-body"><div class="chart-box {% if alto %}alto{% endif %}"><canvas id="{{ id }}" role="img" aria-label="{{ titulo }}"></canvas></div></div>
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro card_tabela(id, titulo, colunas, col='col-12') -%}
+<div class="{{ col }}">
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">{{ titulo }}</h3></div>
+    <div class="card-body table-responsive p-0">
+      <table class="table table-sm table-hover table-striped table-dash mb-0">
+        <thead><tr>{% for c in colunas %}<th class="{% if c.startswith('#') %}num{% endif %}">{{ c.lstrip('#') }}</th>{% endfor %}</tr></thead>
+        <tbody id="{{ id }}"><tr><td colspan="{{ colunas|length }}" class="text-center text-muted">Carregando…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{%- endmacro %}

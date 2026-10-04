@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "_macros.html" import kpi, card_grafico, card_tabela %}
+{% block filtros %}
+<form id="filtro-ano" class="form-inline justify-content-xl-end filtros">
+  <label class="mr-2 small text-muted" for="f-ano">Ano</label>
+  <select id="f-ano" name="ano" class="form-control form-control-sm"></select>
+</form>
+{% endblock %}
+{% block conteudo %}
+<div class="row">
+  {{ kpi('k-receita', 'Receita realizada', 'fas fa-arrow-up', 'success') }}
+  {{ kpi('k-receita-pct', 'Receita x previsto (até o mês)', 'fas fa-bullseye', 'info') }}
+  {{ kpi('k-despesa', 'Despesa realizada', 'fas fa-arrow-down', 'danger') }}
+  {{ kpi('k-resultado', 'Resultado (receita − despesa)', 'fas fa-balance-scale', 'primary') }}
+</div>
+<div class="row">
+  {{ card_grafico('g-receita', 'Receita: previsto x realizado', 'col-lg-6') }}
+  {{ card_grafico('g-despesa', 'Despesa: previsto x realizado', 'col-lg-6') }}
+</div>
+<div class="row">
+  {{ card_tabela('t-categorias', 'Execução por categoria', ['Tipo', 'Categoria', '#Previsto no ano', '#Previsto até o mês', '#Realizado', '#Execução', '#Desvio']) }}
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const { fmt, COR } = Dash;
+  const sel = document.getElementById('f-ano');
+  sel.addEventListener('change', () => {
+    const p = new URLSearchParams(location.search); p.set('ano', sel.value);
+    history.replaceState(null, '', '?' + p.toString());
+    recarregar();
+  });
+  let recarregar;
+  Dash.iniciar('orcamento', d => {
+    sel.innerHTML = d.anos.map(a => `<option ${a === d.ano ? 'selected' : ''}>${a}</option>`).join('');
+    const soma = (tipo, campo) => d.categorias.filter(c => c.tipo === tipo).reduce((s, c) => s + (c[campo] || 0), 0);
+    const rec = soma('receita', 'realizado'), recPrev = soma('receita', 'previsto_ate_hoje');
+    const desp = soma('despesa', 'realizado');
+    Dash.texto('k-receita', fmt.brlCurto(rec));
+    Dash.texto('k-receita-pct', fmt.pct(recPrev ? rec / recPrev * 100 : 0));
+    Dash.texto('k-despesa', fmt.brlCurto(desp));
+    Dash.texto('k-resultado', fmt.brlCurto(rec - desp));
+    ['receita', 'despesa'].forEach(tipo => {
+      const m = d.mensal.filter(x => x.tipo === tipo);
+      Dash.barras('g-' + tipo, m.map(x => fmt.mesNum(x.mes)), [
+        { label: 'Previsto', data: m.map(x => x.previsto), cor: COR.previsto },
+        { label: 'Realizado', data: m.map(x => x.realizado), cor: tipo === 'receita' ? Dash.PALETA[0] : Dash.PALETA[1] },
+      ]);
+    });
+    Dash.tabela('t-categorias', d.categorias, [
+      { campo: 'tipo', html: r => `<span class="badge badge-${r.tipo === 'receita' ? 'success' : 'danger'}">${r.tipo}</span>` },
+      { campo: 'categoria' },
+      { campo: 'previsto', fmt: fmt.brl, num: true },
+      { campo: 'previsto_ate_hoje', fmt: fmt.brl, num: true },
+      { campo: 'realizado', fmt: fmt.brl, num: true },
+      { campo: r => r.previsto_ate_hoje ? r.realizado / r.previsto_ate_hoje * 100 : null, fmt: v => fmt.pct(v), num: true },
+      { num: true, html: r => {
+          const desvio = (r.realizado || 0) - (r.previsto_ate_hoje || 0);
+          // Para receita, acima do previsto é bom; para despesa, é ruim.
+          const bom = r.tipo === 'receita' ? desvio >= 0 : desvio <= 0;
+          return `<span class="${bom ? 'text-success' : 'text-danger'}"><i class="fas fa-${bom ? 'check' : 'exclamation-triangle'} mr-1" aria-label="${bom ? 'favorável' : 'desfavorável'}"></i>${fmt.brl(desvio)}</span>`;
+        } },
+    ]);
+  }).then(fn => { recarregar = fn; });
+})();
+</script>
+{% endblock %}
